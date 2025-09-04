@@ -1,26 +1,40 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
 import { Request } from 'express';
+import { firstValueFrom } from 'rxjs';
+import { NATS_SERVICE } from 'src/config';
+import { ICurrentUser } from '../interfaces/current-user.interface';
+
+type VerifyTokenResponse = { user: ICurrentUser; token: string };
+type AuthenticatedRequest = Request & { user?: ICurrentUser; token?: string };
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-  async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest<Request>();
-    const token = this.extractTokenFromHeader(request);
-    if (!token) {
-      throw new UnauthorizedException('Token not found');
-    }
-    try {
-      request['user'] = {
-        id: 1,
-        name: 'juan',
-        email: 'juan@google.com',
-      };
+  constructor(@Inject(NATS_SERVICE) private readonly client: ClientProxy) {}
 
-      request['token'] = token;
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const req = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    const token = this.extractTokenFromHeader(req);
+    if (!token) throw new UnauthorizedException('Token not found');
+
+    try {
+      const { user, token: newToken } = await firstValueFrom(
+        this.client.send<VerifyTokenResponse, string>('auth.verify.token', token),
+      );
+
+      req.user = user;
+      req.token = newToken;
+
+      return true;
     } catch {
       throw new UnauthorizedException();
     }
-    return true;
   }
 
   private extractTokenFromHeader(request: Request): string | undefined {
