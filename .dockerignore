@@ -1,9 +1,13 @@
-dist/
-node_modules/
-/build
-.env
-*.sublime-workspace
-*.log
+node_modules
+dist
+.git
+.gitignore
+Dockerfile
+npm-debug.log
+pnpm-debug.log
+.env*
+coverage
+
 
 #Prisma
 /generated/prisma
